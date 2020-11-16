@@ -1,0 +1,72 @@
+---
+title: "Anhedonia in PTSD and MDD"
+author: "Or Duek"
+output:
+  html_document:
+    df_print: paged
+---
+
+## Assessing anhedonia in PTSD
+
+```{r, echo=FALSE, results='hide', comment=FALSE, warning=FALSE, message=FALSE}
+require(tidyverse)
+require(readxl)
+require(ggplot2)
+require(lme4)
+require(lmerTest)
+require(ppcor)
+require(lsr)
+require(heplots)
+```
+
+```{r, echo=FALSE}
+# load data
+df <- read_excel('/home/or/PTSD_reward_data/Cleaned_Official_Data_Set_11112020.xlsx')
+```
+
+
+```{r, echo=FALSE}
+ggplot(df, aes(y=`Crit D Total`, x= scid_mdd_pm, color=`CAPS PTSD`)) + geom_boxplot() + 
+  theme_minimal()
+```
+
+* This shows nicely that PTSD patients score higher in the anhedonia scores, even when not depressed
+* Lets tests it using anova
+
+```{r}
+model1 <- aov(`Crit D Total` ~ scid_mdd_pm*`CAPS PTSD`, data=df)
+summary(model1)
+
+#eta1 <- etasq(model1, partial = FALSE) # don't trust this function
+# calculate manually
+#model1
+
+PTSD_parEta <- 1581.2754 / (1581.2754+2367.4913) # 0.4
+PTSD_parEta
+mdd_parEta <- 2044.7645 / (2044.7645 + 2367.4913) # 0.46
+mdd_parEta
+```
+
+- As expected, we see a significant effect for both MDD and PTSD.
+- 40% partial eta square for the PTSD diagnosis, while only 31% for depression. (in different calculation we have 46% explained by depression). 
+- Lets use PCL (which is continuous and we don't use the exact same measure)
+
+
+```{r}
+# using the total CAPS score
+model2 <- aov(`Crit D Total` ~ scid_mdd_pm +`Scr PCL`, data=df)
+summary(model2)
+
+
+```
+
+
+- PCL scores are not significant, which might be problematic (as we can claim the main reason for D expaind by PTSD is that they use same measure)
+- We lack enough BDI scores to use a covariate (which I think will be the best option)
+
+
+
+
+
+
+
