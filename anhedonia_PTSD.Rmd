@@ -21,13 +21,24 @@ require(heplots)
 
 ```{r, echo=FALSE}
 # load data
-df <- read_excel('/home/or/PTSD_reward_data/Cleaned_Official_Data_Set_11112020.xlsx')
+df <- read_csv('/home/or/PTSD_reward_data/CleanedOfficialDataSet11_23_2020.csv')
+# adding caps without D
+df$caps_noD <- df$`CAPS Total` -  df$`Crit D Total`
+```
+
+## Descriptive statistics
+- Need to fix the data set for that
+
+```{r}
+# sex
+table(df$Sex)
+77 / (77+65) # 54% female
+summary(df$Age)
 ```
 
 
 ```{r, echo=FALSE}
-ggplot(df, aes(y=`Crit D Total`, x= scid_mdd_pm, color=`CAPS PTSD`)) + geom_boxplot() + 
-  theme_minimal()
+ggplot(df, aes(y=`Crit D Total`, x= scid_mdd_pm, color=`CAPS PTSD`)) + geom_boxplot() + geom_jitter() + xlab("MDD") + ylab("Cluster D Total Score") + theme_minimal()
 ```
 
 * This shows nicely that PTSD patients score higher in the anhedonia scores, even when not depressed
@@ -49,24 +60,77 @@ mdd_parEta
 
 - As expected, we see a significant effect for both MDD and PTSD.
 - 40% partial eta square for the PTSD diagnosis, while only 31% for depression. (in different calculation we have 46% explained by depression). 
-- Lets use PCL (which is continuous and we don't use the exact same measure)
-
+- Lets compare the model with one with only depression
 
 ```{r}
-# using the total CAPS score
-model2 <- aov(`Crit D Total` ~ scid_mdd_pm +`Scr PCL`, data=df)
-summary(model2)
+model1_1 <- aov(`Crit D Total` ~ scid_mdd_pm, data=df)
+summary(model1_1)
+anova(model1, model1_1)
+BIC(model1, model1_1)
 
+```
+- So, model including PTSD significantly fits better than model with only depression. 
+- Lets use PCL (which is continuous and we don't use the exact same measure)
+
+## Gender interaction
+
+```{r}
+modelG <- aov(`Crit D Total` ~ scid_mdd_pm*Sex+`CAPS PTSD`*Sex, data=df)
+summary(modelG)
 
 ```
 
 
-- PCL scores are not significant, which might be problematic (as we can claim the main reason for D expaind by PTSD is that they use same measure)
-- We lack enough BDI scores to use a covariate (which I think will be the best option)
+### Using BDI
+- Lets take a look only on the PTSD group and see how it behaves
 
 
+```{r}
+# test bdi on entire population
+df_valid_bdi_all <- df[!is.na(df$`Scr BDI`), ] # 64 with valid BDI scores
+df_valid_bdi_all$bdi <- as.numeric(df_valid_bdi_all$`Scr BDI`)
+model3 <- lm(`Crit D Total` ~ `CAPS PTSD` * bdi, df_valid_bdi_all)
+summary(model3)
 
+eta3 <- etasq(model3) # most variance explained by bdi, but almost 10% by PTSD
+```
 
+- Lets try with PCL also
 
+```{r}
+df_valid_bdi_all$pcl <- as.numeric(df_valid_bdi_all$`Scr PCL`)
+df_valid_bdi_all <- df_valid_bdi_all[!is.na(df_valid_bdi_all$`Scr PCL`), ] # 57
 
+model4 <- lm(`Crit D Total` ~ bdi+pcl, data=df_valid_bdi_all)
+summary(model4)
+BIC(model4)
+eta4 <- etasq(model4) # here pcl explains almost 9%
+```
 
+- Compare to model with only BDI
+
+```{r}
+model4.2 <- lm(`Crit D Total` ~ bdi, data=df_valid_bdi_all)
+BIC(model4, model4.2)
+anova(model4, model4.2)
+```
+
+## Now we use the total CAPS score without D as a continous variable (with BDI)
+
+```{r}
+df$caps_noD <- df$`CAPS Total` -  df$`Crit D Total`
+model5 <- lm(`Crit D Total` ~ bdi*caps_noD, data=df_valid_bdi_all)
+summary(model5)
+
+eta5 <- etasq(model5) # here pcl explains almost 9%
+```
+
+- Compare to model without CAPS
+
+```{r}
+model5.2 <- lm(`Crit D Total` ~ bdi, data=df_valid_bdi_all)
+BIC(model5, model5.2)
+anova(model5, model5.2)
+```
+
+- Caps score continous without the D criteria explains almost 30 percent of variance. 
