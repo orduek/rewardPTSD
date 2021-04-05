@@ -1,0 +1,195 @@
+---
+title: "R Notebook"
+output: html_notebook
+author: "Or Duek"
+---
+
+```{r, echo=FALSE, results='hide', comment=FALSE, warning=FALSE, message=FALSE}
+require(tidyverse)
+require(readxl)
+require(ggplot2)
+require(lme4)
+require(lmerTest)
+require(ppcor)
+require(lsr)
+require(heplots)
+library(data.table)
+library(relaimpo)
+```
+
+```{r}
+dfKPEi <- read_csv('/home/or/rewardPTSD/KPEIHR0009_DATA_2021-03-16_1114.csv')
+dfNFi <- read_csv('/home/or/rewardPTSD/NeurofeedbackIHR008_DATA_2021-03-16_1113.csv')
+```
+
+```{r}
+dfKPE <- dplyr::select(dfKPEi, scr_id, redcap_event_name, scr_dem_age,caps5_ptsd,  starts_with('bdi'),starts_with('caps5'))
+dfNF <- dplyr::select(dfNFi, scr_id, redcap_event_name, scr_dem_age, caps5_ptsd,starts_with('bdi'),starts_with('caps5'))
+```
+
+- Clean
+
+```{r}
+dfKPE <- dplyr::filter(dfKPE, redcap_event_name == 'screening_clinicia_arm_1' | redcap_event_name == 'screening_selfrepo_arm_1')
+
+dfKPE_selfReport <- filter(dfKPE, redcap_event_name == 'screening_selfrepo_arm_1')
+duplicated(dfKPE_selfReport[,1])
+
+dfKPE_bdi <- dplyr::select(dfKPE_selfReport, scr_id, starts_with('bdi'), -bdiii_complete)
+dfKPE_bdi <- na.omit(dfKPE_bdi) # no duplicates
+
+dfKPE_clinical <- filter(dfKPE, redcap_event_name == 'screening_clinicia_arm_1')
+duplicated(dfKPE_clinical[,1])
+data_subset <- dfKPE_clinical[ , c("caps5_ptsd")]   
+dfKPE_clinical <- dfKPE_clinical[complete.cases(data_subset),]
+# we still have duplicates. Fix it using earliest date (of interview)
+
+# use this to take earliest date per subject (in case of duplicates)
+dfKPE_clinical <- dfKPE_clinical %>% 
+  group_by(scr_id) %>% 
+  filter(caps5_date == min(caps5_date)) %>% 
+  distinct
+
+dfKPE_caps <- dplyr::select(dfKPE_clinical, scr_id,caps5_ptsd, starts_with('caps5'), -caps5_complete, -caps5_date,-caps5_rater)
+
+#dfKPE_caps <- na.omit(dfKPE_caps)
+
+dfKPE_merged <- merge(dfKPE_caps, dfKPE_bdi, by='scr_id', all=TRUE)
+```
+
+```{r}
+# Neurofeedback
+dfNF <- dplyr::filter(dfNF, redcap_event_name == 'screening_arm_1' )
+dfNF_bdi <- dplyr::select(dfNF, scr_id, starts_with('bdi'), -bdiii_complete)
+dfNF_bdi <- na.omit(dfNF_bdi)
+duplicated(dfNF_bdi[,1])
+
+dfNF_caps <- dplyr::select(dfNF, scr_id, caps5_ptsd, starts_with('caps5'), -caps5_complete, 
+                           -caps5_rater)
+dfNF_caps <- na.omit(dfNF_caps)
+
+dfNF_merged <- merge(dfNF_caps, dfNF_bdi, by='scr_id', all=TRUE)
+duplicated(dfNF_merged[,1])
+
+dfNF_mer <- dfNF_merged %>% 
+  group_by(scr_id) %>% 
+  filter(caps5_date == min(caps5_date)) %>% 
+  distinct
+duplicated(dfNF_mer[,1]) # still some duplicates - take the first
+dfNF_mer <- dfNF_mer[!duplicated(dfNF_mer$scr_id),] 
+# remove caps date now
+dfNF_merged <- dplyr::select(dfNF_mer, -caps5_date)
+
+
+```
+
+Descriptive
+
+```{r}
+dfAll <- rbind(dfKPE_merged, dfNF_merged)
+# test again for duplicates - just to make sure
+duplicated(dfAll[,1]) # clean!
+
+dfDepKPE <- dplyr::select(dfKPEi, scr_id, scid_mdd_pm)
+dfDepNF <- dplyr::select(dfNFi, scr_id, scid_mdd_pm)
+dfDep <- rbind(dfDepKPE, dfDepNF)
+dfDep <- na.omit(dfDep)
+
+dfAge_GenderKPE <- dplyr::select(dfKPEi, scr_id, scr_dem_age, scr_dem_gender)
+dfAge_GenderNF <- dplyr::select(dfNFi, scr_id, scr_dem_age, scr_dem_gender)
+dfDesc <- rbind(dfAge_GenderKPE, dfAge_GenderNF)
+dfDesc <- na.omit(dfDesc)
+dfDesc <- merge(dfAll, dfDesc)
+dfDesc <- merge(dfDesc, dfDep)
+
+```
+
+Calculate factors of PTSD 
+
+```{r}
+dfAll$intrusion <- dfAll$caps5_b1 + dfAll$caps5_b2 + dfAll$caps5_b3 + dfAll$caps5_b4 + dfAll$caps5_b5
+dfAll$avoidance <- dfAll$caps5_c1 + dfAll$caps5_c2
+dfAll$EN <- dfAll$caps5_d5 + dfAll$caps5_d6 + dfAll$caps5_d7
+dfAll$MoodNoEN <- dfAll$caps5_d1 + dfAll$caps5_d2 + dfAll$caps5_d3 + dfAll$caps5_d4
+dfAll$hyper <- dfAll$caps5_e1 + dfAll$caps5_e2 + dfAll$caps5_e3 + dfAll$caps5_e4 + dfAll$caps5_e5 + dfAll$caps5_e6
+```
+
+- Model
+
+```{r}
+model1 <- lm(EN ~ bdi_total + hyper + avoidance + intrusion + MoodNoEN, data=dfAll)
+summary(model1)
+etasq(model1)
+```
+
+- Calculate relative importance for individual symptoms 
+As Robb suggested, adding total BDI score to the model
+
+```{r}
+model_all <- lm(EN ~ caps5_b1 + caps5_b2 + caps5_b3 + caps5_b4 + caps5_b5 + caps5_c1 + caps5_c2 + 
+                  caps5_d1 + caps5_d2 + caps5_d3 + caps5_d4 + caps5_e1 + caps5_e2 + caps5_e3 + caps5_e4 + 
+                  caps5_e5 + caps5_e6 + bdi_total, data = dfAll)
+summary(model_all)
+calc.relimp(model_all, type="lmg")
+```
+
+```{r}
+# bootstrap relative importance
+boot1 <- boot.relimp(model_all, type = 'lmg', b = 100)
+
+booteval <- booteval.relimp(boot1)
+plot(booteval)
+```
+
+```{r}
+labels = list(c(1:100),c('B1','B2','B3','B4','B5','C1','C2','D1','D2','D3','D4','E1','E2','E3','E4','E5',  'E6', 'BDI'))
+lgm_boot <- matrix(booteval@lmg.boot,nrow = 100, ncol = 18, dimnames = labels)
+bootDF <- tibble(lgm_boot)
+bootDF_melt <- melt(lgm_boot)
+ggplot(bootDF_melt, aes(x=Var2, y=value)) + geom_boxplot() +  ylab("Values [LMG]") + xlab('PTSD Symptom')+ theme_minimal() + coord_flip()
+```
+## generate nicer graph
+
+```{r}
+label = c('B1','B2','B3','B4','B5','C1','C2','D1','D2','D3','D4','E1','E2','E3','E4','E5','E6', 'BDI')
+lgmValues <- booteval@lmg # mean of each variable
+lgmLow <- booteval@lmg.lower[1,] # create as vector instead of 1D matrix
+lgmHigh <- booteval@lmg.upper[1,]
+
+lmgData <- tibble(lgmValues, lgmLow, lgmHigh, label)
+ggplot(lmgData, aes(x=label, y=lgmValues)) +  geom_bar(stat="identity", fill='lightblue',
+           position=position_dodge()) +  geom_errorbar(aes(ymin=lgmLow, ymax=lgmHigh), width=.2,
+                 position=position_dodge(.9)) + coord_flip() + ylab("Values [LMG]") + xlab('PTSD Symptom')  +theme_minimal()
+```
+
+## Difference graph
+
+```{r}
+
+diffLabels <- c("B1_B2", "B1_B3","B1_B4", "B1_B5", "B1_C1", "B1_C2", "B1_D1", "B1_D2", "B1_D3",
+                "B1_D4", "B1_E1", "B1_E2", "B1_E3", "B1_E4", "B1_E5", "B1_E6", "B2_B3","B2_B4","B2_B5",
+                "B2_C1","B2_C2", "B2_D1", "B2_D2", "B2_D3","B2_D4", "B2_E1", "B2_E2", "B2_E3", "B2_E4", 
+                "B2_E5", "B2_E6", "B3_B4","B3_B5", "B3_C1", "B3_C2", "B3_D1", "B3_D2", "B3_D3", "B3_D4",
+                "B3_E1", "B3_E2", "B3_E3", "B3_E4", "B3_E5", "B3_E6", "B4_B5", "B4_C1", "B4_C2", "B4_D1",
+                "B4_D2", "B4_D3", "B4_D4", "B4_E1", "B4_E2", "B4_E3", "B4_E4", "B4_E5", "B4_E6", "B5_C1",
+                "B5_C2", "B5_D1","B5_D2", "B5_D3", "B5_D4", "B5_E1", "B5_E2", "B5_E3", "B5_E4", "B5_E5",
+                "B5_E6", "C1_C2", "C1_D1", "C1_D2", "C1_D3", "C1_D4", "C1_E1", "C1_E2", "C1_E3", "C1_E4",
+                "C1_E5", "C1_E6", "C2_D1","C2_D2","C2_D3", "C2_D4", "C2_E1", "C2_E2", "C2_E3", "C2_E4", 
+                "C2_E5", "C2_E6", "D1_D2","D1_D3", "D1_D4", "D1_E1", "D1_E2", "D1_E3", "D1_E4", "D1_E5",
+                "D1_E6", "D2_D3", "D2_D4", "D2_E1", "D2_E2", "D2_E3", "D2_E4", "D2_E5", "D2_E6", "D3_D4",
+                "D3_E1", "D3_E2", "D3_E3", "D3_E4", "D3_E5", "D3_E6", "D4_E1", "D4_E2", "D4_E3", "D4_E4",
+                "D4_E5", "D4_E6", "E1_E2", "E1_E3", "E1_E4", "E1_E5", "E1_E6", "E2_E3", "E2_E4","E2_E5",
+                "E2_E6", "E3_E4", "E3_E5", "E3_E6", "E4_E5", "E4_E6", "E5_E6")
+dfDiff <- booteval@lmg.diff
+dfDiff_low <- booteval@lmg.diff.lower[1,]
+dfDiff_high <- booteval@lmg.diff.upper[1,]
+dfDiff <- tibble(dfDiff, dfDiff_high, dfDiff_low, diffLabels)
+
+#pdf("diffGraph.pdf", width = 10, height = 20)
+png("diffGraph.png", width = 800, height = 1024)
+ggplot(dfDiff, aes(x=diffLabels, y=dfDiff)) +  geom_bar(stat="identity",
+           position=position_dodge()) +  geom_errorbar(aes(ymin=dfDiff_low, ymax=dfDiff_high), width=.2,
+                 position=position_dodge(.9)) + coord_flip() + ylab("Difference in Values [LMG]") + xlab('PTSD Symptom pair')  +theme_minimal()
+dev.off()
+```
+

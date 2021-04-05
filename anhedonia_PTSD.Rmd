@@ -22,8 +22,10 @@ require(heplots)
 ```{r, echo=FALSE}
 # load data
 df <- read_csv('/home/or/PTSD_reward_data/CleanedOfficialDataSet11_23_2020.csv')
+table(df$`CAPS PTSD`, df$scid_mdd_pm)
 # adding caps without D
 df$caps_noD <- df$`CAPS Total` -  df$`Crit D Total`
+df$caps_noEN <- df$`CAPS Total` - df$EN
 ```
 
 ## Descriptive statistics
@@ -36,6 +38,44 @@ table(df$Sex)
 summary(df$Age)
 ```
 
+```{r}
+# Number diagnosed with only PTSD
+table(df$scid_mdd_pm, df$`CAPS PTSD`)
+
+onlyPTSD <- dplyr::filter(df, df$`CAPS PTSD`=='PTSD' & df$scid_mdd_pm == 'No MDD')
+onlyMDD <- dplyr::filter(df, df$`CAPS PTSD`=='NO PTSD' & df$scid_mdd_pm == 'Yes MDD')
+bothMDD_PTSD <- dplyr::filter(df, df$`CAPS PTSD`=='PTSD' & df$scid_mdd_pm == 'Yes MDD')
+HC <- dplyr::filter(df, df$`CAPS PTSD`=='NO PTSD' & df$scid_mdd_pm == 'No MDD')
+
+# PTSD
+sd(onlyPTSD$Age)
+table(onlyPTSD$Sex)
+mean(onlyPTSD$`CAPS Total`)
+sd(onlyPTSD$`CAPS Total`)
+# MDD
+mean(onlyMDD$Age) # 35.25
+sd(onlyMDD$Age) # 10.09
+table(onlyMDD$Sex) # 5f/3m
+mean(onlyMDD$`CAPS Total`) # 22.25
+sd(onlyMDD$`CAPS Total`) # 11.93
+# Both
+mean(bothMDD_PTSD$Age) # 40.98
+sd(bothMDD_PTSD$Age) # 12.85
+table(bothMDD_PTSD$Sex) # 36f/24m
+mean(bothMDD_PTSD$`CAPS Total`) # 44.88
+sd(bothMDD_PTSD$`CAPS Total`) # 10.13
+
+# None
+mean(HC$Age) # 39.53
+sd(HC$Age) # 13.47
+table(HC$Sex) # 8f/18m
+mean(HC$`CAPS Total`) # 11.25
+sd(HC$`CAPS Total`) # 8.39
+
+```
+
+### First look at overall symtpoms
+
 
 ```{r, echo=FALSE}
 ggplot(df, aes(y=`Crit D Total`, x= scid_mdd_pm, color=`CAPS PTSD`)) + geom_boxplot() + geom_jitter() + xlab("MDD") + ylab("Cluster D Total Score") + theme_minimal()
@@ -43,6 +83,8 @@ ggplot(df, aes(y=`Crit D Total`, x= scid_mdd_pm, color=`CAPS PTSD`)) + geom_boxp
 
 * This shows nicely that PTSD patients score higher in the anhedonia scores, even when not depressed
 * Lets tests it using anova
+
+
 
 ```{r}
 model1 <- aov(`Crit D Total` ~ scid_mdd_pm*`CAPS PTSD`, data=df)
@@ -134,3 +176,263 @@ anova(model5, model5.2)
 ```
 
 - Caps score continous without the D criteria explains almost 30 percent of variance. 
+#####################################################################################################
+####################################################################################################
+
+As Robb suggested - testing overall severity:
+```{r}
+modelS <- aov(`CAPS Total` ~ scid_mdd_pm, data=df)
+table(df$`CAPS Total`, df$scid_mdd_pm)
+summary(modelS)
+```
+
+
+# These are results for the paper:
+
+## Now lets do the same with Emotional numbing symptoms 
+
+- The paper might focus primarily on that element.
+
+```{r}
+ggplot(df, aes(y=EN, x= scid_mdd_pm, color=`CAPS PTSD`)) + geom_boxplot() + geom_jitter() + xlab("MDD") + ylab("Emotional Numbing Score") + theme_minimal()
+```
+
+
+```{r}
+model5 <- aov(EN ~ scid_mdd_pm * `CAPS PTSD`, data=df)
+summary(model5)
+
+eta5 <- etasq(model5, partial = T) # don't trust this function
+# calculate manually
+#model1
+
+PTSD_parEta <- 273.6 / (273.6+853.3) # 0.24
+PTSD_parEta
+mdd_parEta <- 573.4 / (573.4 + 853.3) # 0.4
+mdd_parEta
+```
+
+- Test only depression to compare models
+
+```{r}
+model5_1 <- aov(EN ~ scid_mdd_pm, data=df)
+summary(model5_1)
+eta5_1 <- etasq(model5_1, partial = T)
+anova(model5, model5_1)
+BIC(model5, model5_1)
+```
+- Advantage to the model including both MDD and PTSD
+
+```{r}
+df_valid_bdi_all$caps_noEN <- df_valid_bdi_all$`CAPS Total` -  df_valid_bdi_all$EN
+model6 <- lm(EN ~ bdi + caps_noEN, data=df_valid_bdi_all)
+summary(model6)
+
+eta6 <- etasq(model6) # 9%
+```
+
+- Compare to model with just BDI
+
+```{r}
+model6.2 <- lm(EN ~ bdi, data=df_valid_bdi_all)
+summary(model6.2)
+eta6.2 <- etasq(model6.2)
+BIC(model6, model6.2, model6.3)
+anova(model6, model6.2) # sig. difference, by some points...
+```
+
+- Compare with model of just CAPS
+
+```{r}
+model6.3 <- lm(EN ~ caps_noEN, data=df_valid_bdi_all)
+summary(model6.3)
+eta6.3 <- etasq(model6.3)
+BIC(model6, model6.2, model6.3)
+anova(model6.2, model6.3)#, model6.3) # sig. difference, by some points...
+```
+
+
+ - Use same but with PCL 
+ 
+```{r}
+model7 <- lm(EN  ~ bdi*pcl, data=df_valid_bdi_all)
+summary(model7)
+BIC(model4)
+eta4 <- etasq(model4) # here pcl explains almost 9%
+```
+ 
+
+#### Maybe sub-type? 
+- How can we tell?
+- Test clustering of symptoms by level of EN?
+
+```{r}
+df2 <- df
+xEN <- median(df2$EN)
+df2$EN_group <- case_when((df2$EN > xEN) ~ 'HighEn', TRUE ~ 'LowEn')
+
+ggplot(df2, aes(x=EN_group, y=`Scr BDI` )) + geom_boxplot() + geom_jitter()
+```
+
+## Test with RCF data
+
+```{r}
+dfRCF <- read.csv('/home/or/rewardPTSD/ReconsolidationOfFea_DATA_2021-03-02_1737.csv')
+
+table(dfRCF$caps_ptsdc)
+table(dfRCF$scid_mdd_pm)
+table(dfRCF$caps_ptsdc, dfRCF$scid_mdd_pm)
+```
+
+```{r}
+dfBDI <- dplyr::select(dfRCF, starts_with('bdi'), -bdiii_complete)
+bdiTotal <- rowSums(dfBDI)
+dfRCF$bdi_total <- bdiTotal
+
+dfRCF_calc <- dplyr::select(dfRCF, subject_id,scid_mdd_pm, caps_ptsdc, caps_c4_im, caps_c5_im, caps_c6_im, caps_c4_fm,
+  caps_c5_fm, caps_c6_fm, capstotalwithouten, calculatedtotal)
+dfRCF_calc <- na.omit(dfRCF_calc)
+dfRCF_calc$EN <- dfRCF_calc$calculatedtotal - dfRCF_calc$capstotalwithouten
+dfRCF_calc$MDD <- case_when(dfRCF_calc$scid_mdd_pm == 3 ~ "YES", TRUE ~ "No")
+dfRCF_calc$PTSD <- case_when(dfRCF_calc$caps_ptsdc == 1 ~ "YES", TRUE ~ "No")
+
+# add bdi
+bdiDF <- dplyr::select(dfRCF, subject_id, bdi_total)
+bdiDF <- na.omit(bdiDF)
+hist(bdiDF$bdi_total)
+summary(bdiDF$bdi_total)
+dfRCF_calc <- merge(dfRCF_calc, bdiDF, by = 'subject_id', all.x = T)
+```
+
+Do descriptives
+
+```{r}
+table(dfRCF$dem_gender)
+table(dfRCF_calc$MDD)
+table(dfRCF_calc$PTSD)
+table(dfRCF_calc$MDD, dfRCF_calc$PTSD)
+```
+
+Run analysis
+
+```{r}
+model1_RCF <- aov(EN ~ MDD * PTSD, data=dfRCF_calc)
+summary(model1_RCF)
+
+etasq(model1_RCF) # here pcl explains almost 9%
+ggplot(dfRCF_calc, aes(x=MDD, y = EN,  color = PTSD)) + geom_boxplot() + geom_jitter() + ylab("Emotional Numbing Score") + theme_minimal()
+```
+
+Test model with just mdd
+
+```{r}
+model1.2RCF <- aov(EN ~ MDD, data=dfRCF_calc)
+summary(model1.2RCF)
+etasq(model1.2RCF)
+BIC(model1_RCF, model1.2RCF)
+anova(model1_RCF, model1.2RCF)
+```
+
+- Now do linear regression
+
+```{r}
+model2.RCF <- lm(EN ~ capstotalwithouten * bdi_total, data = dfRCF_calc)
+summary(model2.RCF)
+etasq(model2.RCF)
+```
+
+Model with just BDI
+
+```{r}
+model2.2RCF <- lm(EN ~ bdi_total, data = dfRCF_calc)
+summary(model2.2RCF)
+etasq(model2.2RCF)
+
+BIC(model2.RCF, model2.2RCF)
+anova(model2.RCF, model2.2RCF)
+```
+```{r}
+dfRCF_age <- read.csv('/home/or/rewardPTSD/ReconsolidationOfFea_DATA_2021-03-03_0913.csv')
+na.omit(dfRCF_age)
+summary(dfRCF_age$dem_age)
+sd(dfRCF_age$dem_age)
+```
+
+
+###
+###
+
+# Trying new stuff Robb suggested
+
+```{r}
+library(relaimpo)
+
+calc.relimp(EN ~ capstotalwithouten * bdi_total, data = dfRCF_calc)
+
+```
+
+```{r}
+bootModel <- boot.relimp(EN ~ capstotalwithouten * bdi_total, data = dfRCF_calc)
+plot(booteval.relimp(bootModel))
+booteval.relimp(bootModel)
+```
+### Do the same with first dataset (CAPS-5)
+
+```{r}
+calc.relimp(EN ~ bdi * caps_noEN, data=df_valid_bdi_all)
+
+bootModel1 <- boot.relimp(EN ~ bdi * caps_noEN, data=df_valid_bdi_all)
+plot(booteval.relimp(bootModel1))
+booteval.relimp(bootModel1)
+```
+
+
+## Next - we should compute relative importance of re-experiencing (and maybe others)
+
+- We start with DSM-IV dataset
+
+
+```{r}
+dfRCF$reExp <- dfRCF$caps_b1_fm + dfRCF$caps_b2_fm + dfRCF$caps_b3_fm + dfRCF$caps_b4_fm + 
+  dfRCF$caps_b5_fm + dfRCF$caps_b1_im + dfRCF$caps_b2_im + dfRCF$caps_b3_im + dfRCF$caps_b4_im + dfRCF$caps_b5_im
+dfRCF$capsTotalWihtoutRe <- dfRCF$calculatedtotal - dfRCF$reExp
+```
+
+```{r}
+dfRCF_re <- dplyr::select(dfRCF, subject_id,scid_mdd_pm, caps_ptsdc, capsTotalWihtoutRe, calculatedtotal, reExp)
+dfRCF_re <- na.omit(dfRCF_re)
+dfRCF_re$MDD <- case_when(dfRCF_re$scid_mdd_pm == 3 ~ "YES", TRUE ~ "No")
+dfRCF_re$PTSD <- case_when(dfRCF_re$caps_ptsdc == 1 ~ "YES", TRUE ~ "No")
+
+# add bdi
+bdiDF <- dplyr::select(dfRCF, subject_id, bdi_total)
+bdiDF <- na.omit(bdiDF)
+dfRCF_re <- merge(dfRCF_re, bdiDF, by = 'subject_id', all.x = T)
+```
+
+```{r}
+calc.relimp(reExp ~ bdi_total * capsTotalWihtoutRe, data=dfRCF_re)
+
+bootModelRe <- boot.relimp(reExp ~ bdi_total + capsTotalWihtoutRe, data=dfRCF_re)
+plot(booteval.relimp(bootModelRe))
+booteval.relimp(bootModelRe)
+```
+
+## Lets look at just PTSD group
+
+```{r}
+dfPTSD <- filter(df_valid_bdi_all, df_valid_bdi_all$scid_mdd_pm=='No MDD') # 74 participants
+model_JustPTSD <- lm(EN ~ caps_noEN +  bdi, dfPTSD)
+summary(model_JustPTSD)
+
+calc.relimp(EN ~ bdi + caps_noEN, data=dfPTSD)
+```
+
+
+## Now look at individual symtpoms (CAPS and BDI) and their contribution to Emotional numbing
+
+```{r}
+df_ind <- dplyr::select(dfRCF, starts_with('caps_'), -caps_f1_pw, -caps_f2_pw, -caps_f3_pw)
+df_ind <- na.omit(df_ind)
+```
+
