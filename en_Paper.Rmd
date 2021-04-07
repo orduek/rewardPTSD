@@ -122,13 +122,27 @@ summary(model1)
 etasq(model1)
 ```
 
+- Not interesting.
+
+## Relative Importance
 - Calculate relative importance for individual symptoms 
-As Robb suggested, adding total BDI score to the model
+Adding total BDI score to the model
 
 ```{r}
-model_all <- lm(EN ~ caps5_b1 + caps5_b2 + caps5_b3 + caps5_b4 + caps5_b5 + caps5_c1 + caps5_c2 + 
-                  caps5_d1 + caps5_d2 + caps5_d3 + caps5_d4 + caps5_e1 + caps5_e2 + caps5_e3 + caps5_e4 + 
-                  caps5_e5 + caps5_e6 + bdi_total, data = dfAll)
+# rename columns (easier for plotting later)
+names <- c('B1','B2','B3','B4','B5','C1','C2','D1','D2','D3','D4','D5','D6','D7','E1','E2','E3','E4','E5',
+           'E6','BDI')
+oldNames <- c('caps5_b1','caps5_b2','caps5_b3','caps5_b4','caps5_b5','caps5_c1','caps5_c2', 'caps5_d1',
+              'caps5_d2','caps5_d3','caps5_d4','caps5_d5','caps5_d6','caps5_d7','caps5_e1','caps5_e2',
+              'caps5_e3','caps5_e4','caps5_e5','caps5_e6','bdi_total')
+dfAll_renamed <- data.table::setnames(dfAll, oldNames, names)
+```
+
+
+```{r}
+model_all <- lm(EN ~ B1 + B2 + B3 + B4 + B5 + C1 + C2 + 
+                  D1 + D2 + D3 + D4 + E1 + E2 + E3 + E4 + 
+                  E5 + E6 + BDI, data = dfAll)
 summary(model_all)
 calc.relimp(model_all, type="lmg")
 ```
@@ -157,9 +171,16 @@ lgmLow <- booteval@lmg.lower[1,] # create as vector instead of 1D matrix
 lgmHigh <- booteval@lmg.upper[1,]
 
 lmgData <- tibble(lgmValues, lgmLow, lgmHigh, label)
-ggplot(lmgData, aes(x=label, y=lgmValues)) +  geom_bar(stat="identity", fill='lightblue',
-           position=position_dodge()) +  geom_errorbar(aes(ymin=lgmLow, ymax=lgmHigh), width=.2,
-                 position=position_dodge(.9)) + coord_flip() + ylab("Values [LMG]") + xlab('PTSD Symptom')  +theme_minimal()
+# sort data by value
+lmgOrdered <- lmgData[order(lgmValues, decreasing = F),]
+# set label as factor with ordered levels
+lmgOrdered$label <- factor(lmgOrdered$label, levels = lmgOrdered$label)
+#plot
+pdf('Figure_2.pdf')
+ggplot(lmgOrdered, aes(x=label, y=(lgmValues*100))) +  geom_bar(stat="identity", fill='lightblue',
+           position=position_dodge()) +  geom_errorbar(aes(ymin=(lgmLow*100), ymax=(lgmHigh*100)), width=.2,
+                 position=position_dodge(.9)) + coord_flip() + ylab("Values [LMG in %]") + xlab('PTSD Symptom')  +theme_minimal()
+dev.off()
 ```
 
 ## Difference graph
@@ -167,26 +188,15 @@ ggplot(lmgData, aes(x=label, y=lgmValues)) +  geom_bar(stat="identity", fill='li
 ```{r}
 
 diffLabels <- c("B1_B2", "B1_B3","B1_B4", "B1_B5", "B1_C1", "B1_C2", "B1_D1", "B1_D2", "B1_D3",
-                "B1_D4", "B1_E1", "B1_E2", "B1_E3", "B1_E4", "B1_E5", "B1_E6", "B2_B3","B2_B4","B2_B5",
-                "B2_C1","B2_C2", "B2_D1", "B2_D2", "B2_D3","B2_D4", "B2_E1", "B2_E2", "B2_E3", "B2_E4", 
-                "B2_E5", "B2_E6", "B3_B4","B3_B5", "B3_C1", "B3_C2", "B3_D1", "B3_D2", "B3_D3", "B3_D4",
-                "B3_E1", "B3_E2", "B3_E3", "B3_E4", "B3_E5", "B3_E6", "B4_B5", "B4_C1", "B4_C2", "B4_D1",
-                "B4_D2", "B4_D3", "B4_D4", "B4_E1", "B4_E2", "B4_E3", "B4_E4", "B4_E5", "B4_E6", "B5_C1",
-                "B5_C2", "B5_D1","B5_D2", "B5_D3", "B5_D4", "B5_E1", "B5_E2", "B5_E3", "B5_E4", "B5_E5",
-                "B5_E6", "C1_C2", "C1_D1", "C1_D2", "C1_D3", "C1_D4", "C1_E1", "C1_E2", "C1_E3", "C1_E4",
-                "C1_E5", "C1_E6", "C2_D1","C2_D2","C2_D3", "C2_D4", "C2_E1", "C2_E2", "C2_E3", "C2_E4", 
-                "C2_E5", "C2_E6", "D1_D2","D1_D3", "D1_D4", "D1_E1", "D1_E2", "D1_E3", "D1_E4", "D1_E5",
-                "D1_E6", "D2_D3", "D2_D4", "D2_E1", "D2_E2", "D2_E3", "D2_E4", "D2_E5", "D2_E6", "D3_D4",
-                "D3_E1", "D3_E2", "D3_E3", "D3_E4", "D3_E5", "D3_E6", "D4_E1", "D4_E2", "D4_E3", "D4_E4",
-                "D4_E5", "D4_E6", "E1_E2", "E1_E3", "E1_E4", "E1_E5", "E1_E6", "E2_E3", "E2_E4","E2_E5",
-                "E2_E6", "E3_E4", "E3_E5", "E3_E6", "E4_E5", "E4_E6", "E5_E6")
+              "B1_D4", "B1_E1", "B1_E2", "B1_E3", "B1_E4", "B1_E5", "B1_E6","B1_BDI", "B2_B3","B2_B4","B2_B5", "B2_C1","B2_C2", "B2_D1", "B2_D2", "B2_D3","B2_D4", "B2_E1", "B2_E2", "B2_E3", "B2_E4", "B2_E5", "B2_E6","B2_BDI", "B3_B4","B3_B5", "B3_C1", "B3_C2", "B3_D1", "B3_D2", "B3_D3", "B3_D4", "B3_E1", "B3_E2", "B3_E3", "B3_E4", "B3_E5", "B3_E6","B3_BDI", "B4_B5", "B4_C1", "B4_C2", "B4_D1", "B4_D2", "B4_D3", "B4_D4", "B4_E1", "B4_E2", "B4_E3", "B4_E4", "B4_E5", "B4_E6","B4_BDI", "B5_C1", "B5_C2", "B5_D1","B5_D2", "B5_D3", "B5_D4", "B5_E1", "B5_E2", "B5_E3", "B5_E4", "B5_E5", "B5_E6", "B5_BDI", "C1_C2", "C1_D1", "C1_D2", "C1_D3", "C1_D4", "C1_E1", "C1_E2", "C1_E3", "C1_E4", "C1_E5", "C1_E6", "C1_BDI", "C2_D1","C2_D2","C2_D3", "C2_D4", "C2_E1", "C2_E2", "C2_E3", "C2_E4", "C2_E5", "C2_E6", "C2_BDI", "D1_D2","D1_D3", "D1_D4", "D1_E1", "D1_E2", "D1_E3", "D1_E4", "D1_E5", "D1_E6", "D1_BDI", "D2_D3", "D2_D4", "D2_E1", "D2_E2", "D2_E3", "D2_E4", "D2_E5", "D2_E6", "D2_BDI", "D3_D4", "D3_E1", "D3_E2", "D3_E3", "D3_E4", "D3_E5", "D3_E6", "D3_BDI", "D4_E1", "D4_E2", "D4_E3", "D4_E4", "D4_E5", "D4_E6","D4_BDI", "E1_E2", "E1_E3", "E1_E4", "E1_E5", "E1_E6", "E1_BDI", "E2_E3", "E2_E4","E2_E5", "E2_E6", "E2_BDI", "E3_E4", "E3_E5", "E3_E6", "E3_BDI", "E4_E5", "E4_E6", "E4_BDI", "E5_E6", "E5_BDI", "E6_BDI")
 dfDiff <- booteval@lmg.diff
 dfDiff_low <- booteval@lmg.diff.lower[1,]
 dfDiff_high <- booteval@lmg.diff.upper[1,]
 dfDiff <- tibble(dfDiff, dfDiff_high, dfDiff_low, diffLabels)
 
-#pdf("diffGraph.pdf", width = 10, height = 20)
-png("diffGraph.png", width = 800, height = 1024)
+#dfDiff <- booteval@markdiff
+pdf("diffGraph.pdf", width = 10, height = 20)
+#png("diffGraph.png", width = 800, height = 1024)
 ggplot(dfDiff, aes(x=diffLabels, y=dfDiff)) +  geom_bar(stat="identity",
            position=position_dodge()) +  geom_errorbar(aes(ymin=dfDiff_low, ymax=dfDiff_high), width=.2,
                  position=position_dodge(.9)) + coord_flip() + ylab("Difference in Values [LMG]") + xlab('PTSD Symptom pair')  +theme_minimal()

@@ -194,7 +194,9 @@ summary(modelS)
 - The paper might focus primarily on that element.
 
 ```{r}
+pdf('Figure_1.pdf')
 ggplot(df, aes(y=EN, x= scid_mdd_pm, color=`CAPS PTSD`)) + geom_boxplot() + geom_jitter() + xlab("MDD") + ylab("Emotional Numbing Score") + theme_minimal()
+dev.off()
 ```
 
 
@@ -251,29 +253,6 @@ BIC(model6, model6.2, model6.3)
 anova(model6.2, model6.3)#, model6.3) # sig. difference, by some points...
 ```
 
-
- - Use same but with PCL 
- 
-```{r}
-model7 <- lm(EN  ~ bdi*pcl, data=df_valid_bdi_all)
-summary(model7)
-BIC(model4)
-eta4 <- etasq(model4) # here pcl explains almost 9%
-```
- 
-
-#### Maybe sub-type? 
-- How can we tell?
-- Test clustering of symptoms by level of EN?
-
-```{r}
-df2 <- df
-xEN <- median(df2$EN)
-df2$EN_group <- case_when((df2$EN > xEN) ~ 'HighEn', TRUE ~ 'LowEn')
-
-ggplot(df2, aes(x=EN_group, y=`Scr BDI` )) + geom_boxplot() + geom_jitter()
-```
-
 ## Test with RCF data
 
 ```{r}
@@ -304,7 +283,7 @@ summary(bdiDF$bdi_total)
 dfRCF_calc <- merge(dfRCF_calc, bdiDF, by = 'subject_id', all.x = T)
 ```
 
-Do descriptives
+Do descriptive
 
 ```{r}
 table(dfRCF$dem_gender)
@@ -320,7 +299,9 @@ model1_RCF <- aov(EN ~ MDD * PTSD, data=dfRCF_calc)
 summary(model1_RCF)
 
 etasq(model1_RCF) # here pcl explains almost 9%
+pdf('FigureS1.pdf')
 ggplot(dfRCF_calc, aes(x=MDD, y = EN,  color = PTSD)) + geom_boxplot() + geom_jitter() + ylab("Emotional Numbing Score") + theme_minimal()
+dev.off()
 ```
 
 Test model with just mdd
@@ -356,83 +337,5 @@ dfRCF_age <- read.csv('/home/or/rewardPTSD/ReconsolidationOfFea_DATA_2021-03-03_
 na.omit(dfRCF_age)
 summary(dfRCF_age$dem_age)
 sd(dfRCF_age$dem_age)
-```
-
-
-###
-###
-
-# Trying new stuff Robb suggested
-
-```{r}
-library(relaimpo)
-
-calc.relimp(EN ~ capstotalwithouten * bdi_total, data = dfRCF_calc)
-
-```
-
-```{r}
-bootModel <- boot.relimp(EN ~ capstotalwithouten * bdi_total, data = dfRCF_calc)
-plot(booteval.relimp(bootModel))
-booteval.relimp(bootModel)
-```
-### Do the same with first dataset (CAPS-5)
-
-```{r}
-calc.relimp(EN ~ bdi * caps_noEN, data=df_valid_bdi_all)
-
-bootModel1 <- boot.relimp(EN ~ bdi * caps_noEN, data=df_valid_bdi_all)
-plot(booteval.relimp(bootModel1))
-booteval.relimp(bootModel1)
-```
-
-
-## Next - we should compute relative importance of re-experiencing (and maybe others)
-
-- We start with DSM-IV dataset
-
-
-```{r}
-dfRCF$reExp <- dfRCF$caps_b1_fm + dfRCF$caps_b2_fm + dfRCF$caps_b3_fm + dfRCF$caps_b4_fm + 
-  dfRCF$caps_b5_fm + dfRCF$caps_b1_im + dfRCF$caps_b2_im + dfRCF$caps_b3_im + dfRCF$caps_b4_im + dfRCF$caps_b5_im
-dfRCF$capsTotalWihtoutRe <- dfRCF$calculatedtotal - dfRCF$reExp
-```
-
-```{r}
-dfRCF_re <- dplyr::select(dfRCF, subject_id,scid_mdd_pm, caps_ptsdc, capsTotalWihtoutRe, calculatedtotal, reExp)
-dfRCF_re <- na.omit(dfRCF_re)
-dfRCF_re$MDD <- case_when(dfRCF_re$scid_mdd_pm == 3 ~ "YES", TRUE ~ "No")
-dfRCF_re$PTSD <- case_when(dfRCF_re$caps_ptsdc == 1 ~ "YES", TRUE ~ "No")
-
-# add bdi
-bdiDF <- dplyr::select(dfRCF, subject_id, bdi_total)
-bdiDF <- na.omit(bdiDF)
-dfRCF_re <- merge(dfRCF_re, bdiDF, by = 'subject_id', all.x = T)
-```
-
-```{r}
-calc.relimp(reExp ~ bdi_total * capsTotalWihtoutRe, data=dfRCF_re)
-
-bootModelRe <- boot.relimp(reExp ~ bdi_total + capsTotalWihtoutRe, data=dfRCF_re)
-plot(booteval.relimp(bootModelRe))
-booteval.relimp(bootModelRe)
-```
-
-## Lets look at just PTSD group
-
-```{r}
-dfPTSD <- filter(df_valid_bdi_all, df_valid_bdi_all$scid_mdd_pm=='No MDD') # 74 participants
-model_JustPTSD <- lm(EN ~ caps_noEN +  bdi, dfPTSD)
-summary(model_JustPTSD)
-
-calc.relimp(EN ~ bdi + caps_noEN, data=dfPTSD)
-```
-
-
-## Now look at individual symtpoms (CAPS and BDI) and their contribution to Emotional numbing
-
-```{r}
-df_ind <- dplyr::select(dfRCF, starts_with('caps_'), -caps_f1_pw, -caps_f2_pw, -caps_f3_pw)
-df_ind <- na.omit(df_ind)
 ```
 
