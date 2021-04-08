@@ -113,6 +113,9 @@ BIC(model5, model5_1)
 - Advantage to the model including both MDD and PTSD
 
 ```{r}
+# test bdi on entire population
+df_valid_bdi_all <- df[!is.na(df$`Scr BDI`), ] # 64 with valid BDI scores
+df_valid_bdi_all$bdi <- as.numeric(df_valid_bdi_all$`Scr BDI`)
 df_valid_bdi_all$caps_noEN <- df_valid_bdi_all$`CAPS Total` -  df_valid_bdi_all$EN
 model6 <- lm(EN ~ bdi + caps_noEN, data=df_valid_bdi_all)
 summary(model6)
