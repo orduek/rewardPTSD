@@ -149,15 +149,15 @@ calc.relimp(model_all, type="lmg")
 
 ```{r}
 # bootstrap relative importance
-boot1 <- boot.relimp(model_all, type = 'lmg', b = 100)
+boot1 <- boot.relimp(model_all, type = 'lmg', b = 1000)
 
 booteval <- booteval.relimp(boot1)
 plot(booteval)
 ```
 
 ```{r}
-labels = list(c(1:100),c('B1','B2','B3','B4','B5','C1','C2','D1','D2','D3','D4','E1','E2','E3','E4','E5',  'E6', 'BDI'))
-lgm_boot <- matrix(booteval@lmg.boot,nrow = 100, ncol = 18, dimnames = labels)
+labels = list(c(1:1000),c('B1','B2','B3','B4','B5','C1','C2','D1','D2','D3','D4','E1','E2','E3','E4','E5',  'E6', 'BDI'))
+lgm_boot <- matrix(booteval@lmg.boot,nrow = 1000, ncol = 18, dimnames = labels)
 bootDF <- tibble(lgm_boot)
 bootDF_melt <- melt(lgm_boot)
 ggplot(bootDF_melt, aes(x=Var2, y=value)) + geom_boxplot() +  ylab("Values [LMG]") + xlab('PTSD Symptom')+ theme_minimal() + coord_flip()

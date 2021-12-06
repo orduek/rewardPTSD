@@ -17,6 +17,7 @@ require(lmerTest)
 require(ppcor)
 require(lsr)
 require(heplots)
+library(relaimpo)
 ```
 
 ```{r, echo=FALSE}
@@ -129,7 +130,7 @@ eta6 <- etasq(model6) # 9%
 model6.2 <- lm(EN ~ bdi, data=df_valid_bdi_all)
 summary(model6.2)
 eta6.2 <- etasq(model6.2)
-BIC(model6, model6.2, model6.3)
+BIC(model6, model6.2)
 anova(model6, model6.2) # sig. difference, by some points...
 ```
 
@@ -222,10 +223,112 @@ etasq(model2.2RCF)
 BIC(model2.RCF, model2.2RCF)
 anova(model2.RCF, model2.2RCF)
 ```
+
+# Relative Importance
+
+```{r}
+capsLabels <- c("caps_b1_fm", "caps_b1_im","caps_b2_fm","caps_b2_im", "caps_b3_fm","caps_b3_im", "caps_b4_fm", "caps_b4_im","caps_b5_fm","caps_b5_im","caps_c1_fm", "caps_c1_im","caps_c2_fm","caps_c2_im","caps_c3_fm","caps_c3_im", "caps_c4_fm", "caps_c4_im", "caps_c5_fm","caps_c5_im","caps_c6_fm", "caps_c6_im", "caps_c7_fm", "caps_c7_im", "caps_d1_fm" ,"caps_d1_im", "caps_d2_fm", "caps_d2_im","caps_d3_fm","caps_d3_im", "caps_d4_fm", "caps_d4_im", "caps_d5_fm","caps_d5_im")
+dfRCF_relaimp <- dplyr::select(dfRCF, subject_id, capsLabels, -bdiii_complete )
+dfRCF_relaimp <- na.omit(dfRCF_relaimp)
+dfRCF_relaimp <- merge(dfRCF_relaimp, bdiDF)
+# rename columns (easier for plotting later)
+# need to combine intensity and frequency of each symptom
+data2 <- dplyr::select(dfRCF_relaimp, subject_id, bdi_total)
+data2$B1 <- dfRCF_relaimp$caps_b1_fm + dfRCF_relaimp$caps_b1_im
+data2$B2 <- dfRCF_relaimp$caps_b2_fm + dfRCF_relaimp$caps_b2_im
+data2$B3 <- dfRCF_relaimp$caps_b3_fm + dfRCF_relaimp$caps_b3_im
+data2$B4 <- dfRCF_relaimp$caps_b4_fm + dfRCF_relaimp$caps_b4_im
+data2$B5 <- dfRCF_relaimp$caps_b5_fm + dfRCF_relaimp$caps_b5_im
+data2$C1 <- dfRCF_relaimp$caps_c1_fm + dfRCF_relaimp$caps_c1_im
+data2$C2 <- dfRCF_relaimp$caps_c2_fm + dfRCF_relaimp$caps_c2_im
+data2$C3 <- dfRCF_relaimp$caps_c1_fm + dfRCF_relaimp$caps_c3_im
+data2$C4 <- dfRCF_relaimp$caps_c4_fm + dfRCF_relaimp$caps_c4_im
+data2$C5 <- dfRCF_relaimp$caps_c5_fm + dfRCF_relaimp$caps_c5_im
+data2$C6 <- dfRCF_relaimp$caps_c6_fm + dfRCF_relaimp$caps_c6_im
+data2$C7 <- dfRCF_relaimp$caps_c7_fm + dfRCF_relaimp$caps_c7_im
+data2$D1 <- dfRCF_relaimp$caps_d1_fm + dfRCF_relaimp$caps_d1_im
+data2$D2 <- dfRCF_relaimp$caps_d2_fm + dfRCF_relaimp$caps_d2_im
+data2$D3 <- dfRCF_relaimp$caps_d3_fm + dfRCF_relaimp$caps_d3_im
+data2$D4 <- dfRCF_relaimp$caps_d4_fm + dfRCF_relaimp$caps_d4_im
+data2$D5 <- dfRCF_relaimp$caps_d5_fm + dfRCF_relaimp$caps_d5_im
+data2$EN <- data2$C4 + data2$C5 + data2$C6
+```
+
+Model
+```{r}
+model_all_data2 <- lm(EN ~ B1 + B2 + B3 + B4 + B5 + C1 + C2 + C3 + 
+                  C7 + D1 + D2 + D3 + D4 + D5 + bdi_total, data = data2)
+summary(model_all_data2)
+calc.relimp(model_all_data2, type="lmg")
+```
+
+
+```{r}
+boot2 <- boot.relimp(model_all_data2, type = 'lmg', b = 1000)
+
+booteval2 <- booteval.relimp(boot2)
+plot(booteval2)
+```
+## generate nicer graph
+
+```{r}
+label = c('B1','B2','B3','B4','B5','C1','C2', 'C3', 'C7', 'D1','D2','D3','D4','D5', 'BDI')
+lgmValues <- booteval2@lmg # mean of each variable
+lgmLow <- booteval2@lmg.lower[1,] # create as vector instead of 1D matrix
+lgmHigh <- booteval2@lmg.upper[1,]
+
+lmgData2 <- tibble(lgmValues, lgmLow, lgmHigh, label)
+# sort data by value
+lmgOrdered2 <- lmgData2[order(lgmValues, decreasing = F),]
+# set label as factor with ordered levels
+lmgOrdered2$label <- factor(lmgOrdered2$label, levels = lmgOrdered2$label)
+#plot
+pdf('Figure_S2.pdf')
+ggplot(lmgOrdered2, aes(x=label, y=(lgmValues*100))) +  geom_bar(stat="identity", fill='lightblue',
+           position=position_dodge()) +  geom_errorbar(aes(ymin=(lgmLow*100), ymax=(lgmHigh*100)), width=.2,
+                 position=position_dodge(.9)) + coord_flip() + ylab("Values [LMG in %]") + xlab('PTSD Symptom')  +theme_minimal()
+dev.off()
+```
+
+## Difference graph
+
+```{r}
+
+diffLabels <- c("B1_B2", "B1_B3","B1_B4", "B1_B5", "B1_C1", "B1_C2", "B1_C3","B1_C7", "B1_D1", "B1_D2", "B1_D3",
+              "B1_D4", "B1_D5", "B1_BDI", "B2_B3","B2_B4","B2_B5", "B2_C1","B2_C2","B2_C3","B2_C7", "B2_D1", "B2_D2", "B2_D3","B2_D4", "B2_D5", "B2_BDI", "B3_B4","B3_B5", "B3_C1", "B3_C2", "B3_C3","B3_C7", "B3_D1", "B3_D2", "B3_D3", "B3_D4", "B3_D5", "B3_BDI", "B4_B5", "B4_C1", "B4_C2", "B4_C3","B4_C7", "B4_D1", "B4_D2", "B4_D3", "B4_D4", "B4_D5", "B4_BDI", "B5_C1", "B5_C2", "B5_C3", "B5_C7", "B5_D1","B5_D2", "B5_D3", "B5_D4", "B5_D5", "B5_BDI", "C1_C2","C1_C3","C1_C7","C1_D1", "C1_D2", "C1_D3", "C1_D4", "C1_D5","C1_BDI", "C2_C3","C2_C7", "C2_D1","C2_D2","C2_D3", "C2_D4", "C2_D5","C2_BDI", "C3_C7", "C3_D1", "C3_D2","C3_D3","C3_D4","C3_D5","C3_BDI", "C7_D1","C7_D2","C7_D3","C7_D4","C7_D5","C7_BDI", "D1_D2","D1_D3", "D1_D4", "D1_D5", "D1_BDI", "D2_D3", "D2_D4", "D2_D5", "D2_BDI", "D3_D4", "D3_D5", "D3_BDI", "D4_D5", "D4_BDI", "D5_BDI")
+dfDiff2 <- booteval2@lmg.diff
+dfDiff_low2 <- booteval2@lmg.diff.lower[1,]
+dfDiff_high2 <- booteval2@lmg.diff.upper[1,]
+dfDiff2 <- tibble(dfDiff2, dfDiff_high2, dfDiff_low2, diffLabels)
+
+#dfDiff <- booteval@markdiff
+pdf("diffGraph_data2.pdf", width = 10, height = 20)
+#png("diffGraph.png", width = 800, height = 1024)
+ggplot(dfDiff2, aes(x=diffLabels, y=dfDiff2)) +  geom_bar(stat="identity",
+           position=position_dodge()) +  geom_errorbar(aes(ymin=dfDiff_low2, ymax=dfDiff_high2), width=.2,
+                 position=position_dodge(.9)) + coord_flip() + ylab("Difference in Values [LMG]") + xlab('PTSD Symptom pair')  +theme_minimal()
+dev.off()
+```
+
 ```{r}
 dfRCF_age <- read.csv('/home/or/rewardPTSD/ReconsolidationOfFea_DATA_2021-03-03_0913.csv')
 na.omit(dfRCF_age)
 summary(dfRCF_age$dem_age)
 sd(dfRCF_age$dem_age)
 ```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
